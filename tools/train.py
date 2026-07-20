@@ -138,9 +138,8 @@ def main():
     begin_epoch = cfg.TRAIN.BEGIN_EPOCH
 
     if rank in [-1, 0]:
-        checkpoint_dir = os.path.join(cfg.LOG_DIR, cfg.DATASET.DATASET)
-        os.makedirs(checkpoint_dir, exist_ok=True)  # no longer created by create_logger since run dirs moved to LOG_DIR/<run_name>
-        checkpoint_file = os.path.join(checkpoint_dir, 'checkpoint.pth')
+        # resume checkpoint lives at a fixed path (LOG_DIR root), independent of run name
+        checkpoint_file = os.path.join(cfg.LOG_DIR, 'checkpoint.pth')
         if os.path.exists(cfg.MODEL.PRETRAINED):
             logger.info("=> loading model '{}'".format(cfg.MODEL.PRETRAINED))
             checkpoint = torch.load(cfg.MODEL.PRETRAINED)
@@ -345,7 +344,7 @@ def main():
                 name=cfg.MODEL.NAME,
                 model=model,
                 optimizer=optimizer,
-                output_dir=os.path.join(cfg.LOG_DIR, cfg.DATASET.DATASET),
+                output_dir=cfg.LOG_DIR,
                 filename='checkpoint.pth'
             )
 

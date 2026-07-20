@@ -132,7 +132,7 @@ def validate(epoch,config, val_loader, val_dataset, model, criterion, output_dir
     weights = None
 
     save_dir = output_dir + os.path.sep + 'visualization'
-    if not os.path.exists(save_dir):
+    if config.TEST.PLOTS and not os.path.exists(save_dir):
         os.mkdir(save_dir)
 
     # print(save_dir)
@@ -360,7 +360,7 @@ def validate(epoch,config, val_loader, val_dataset, model, criterion, output_dir
     map70 = None
     map75 = None
     if len(stats) and stats[0].any():
-        p, r, ap, f1, ap_class = ap_per_class(*stats, plot=True, save_dir=save_dir, names=names)
+        p, r, ap, f1, ap_class = ap_per_class(*stats, plot=config.TEST.PLOTS, save_dir=save_dir, names=names)
         ap50, ap70, ap75,ap = ap[:, 0], ap[:,4], ap[:,5],ap.mean(1)  # [P, R, AP@0.5, AP@0.5:0.95]
         mp, mr, map50, map70, map75, map = p.mean(), r.mean(), ap50.mean(), ap70.mean(),ap75.mean(),ap.mean()
         nt = np.bincount(stats[3].astype(np.int64), minlength=nc)  # number of targets per class
@@ -416,7 +416,7 @@ def validate(epoch,config, val_loader, val_dataset, model, criterion, output_dir
             print(f'pycocotools unable to run: {e}')
 
     # Return results
-    if not training:
+    if not training and config.TEST.PLOTS:
         s = f"\n{len(list(save_dir.glob('labels/*.txt')))} labels saved to {save_dir / 'labels'}" if config.TEST.SAVE_TXT else ''
         print(f"Results saved to {save_dir}{s}")
     model.float()  # for training
