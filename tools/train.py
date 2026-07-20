@@ -123,7 +123,7 @@ def main():
     optimizer = get_optimizer(cfg, model)
 
     # load checkpoint model
-    best_perf = 0.0
+    best_perf = -1.0  # -1 agar validasi pertama selalu menyimpan best.pth
     best_model = False
     last_epoch = -1
 
@@ -284,6 +284,7 @@ def main():
     # training
     num_warmup = max(round(cfg.TRAIN.WARMUP_EPOCHS * num_batch), 1000)
     scaler = amp.GradScaler(enabled=device.type != 'cpu')
+    no_improve = 0  # counter early stopping (dihitung per validasi, bukan per epoch)
     print('=> start training...')
     for epoch in range(begin_epoch+1, cfg.TRAIN.END_EPOCH+1):
         if rank != -1:
@@ -295,7 +296,7 @@ def main():
         lr_scheduler.step()
 
         # evaluate on validation set
-        if (epoch % cfg.TRAIN.VAL_FREQ == 0 or epoch == cfg.TRAIN.END_EPOCH or epoch in list(range(181,200)) or epoch in [162, 165, 167, 170, 172, 175, 178]) and rank in [-1, 0]:
+        if (epoch % cfg.TRAIN.VAL_FREQ == 0 or epoch == cfg.TRAIN.END_EPOCH) and rank in [-1, 0]:
             # print('validate')
             da_segment_results,ll_segment_results,detect_results, total_loss,maps, times = validate(
                 epoch,cfg, valid_loader, valid_dataset, model, criterion,
@@ -315,45 +316,43 @@ def main():
                           t_inf=times[0], t_nms=times[1])
             logger.info(msg)
 
-        # save checkpoint model and best model
-        if (epoch % cfg.TRAIN.VAL_FREQ == 0 or epoch == cfg.TRAIN.END_EPOCH or epoch in list(range(181,200)) or epoch in [162, 165, 167, 170, 172, 175, 178]) and rank in [-1, 0]:
-        # if rank in [-1, 0]:
-            savepath = os.path.join(final_output_dir, f'epoch-{epoch}.pth')
-            logger.info('=> saving checkpoint to {}'.format(savepath))
+            # early stopping: fitness = weighted mAP (lib.core.general.fitness)
+            patience = cfg.TRAIN.get('EARLY_STOP_PATIENCE', 0)
+            if float(fi) > best_perf:
+                best_perf, no_improve = float(fi), 0
+                logger.info(f'=> new best (fitness={best_perf:.4f}), saving best.pth')
+                save_checkpoint(epoch=epoch, name=cfg.MODEL.NAME, model=model,
+                                optimizer=optimizer, output_dir=final_output_dir,
+                                filename='best.pth')
+            else:
+                no_improve += 1
+                if patience and no_improve >= patience:
+                    logger.info(f'=> early stopping: fitness tidak membaik {patience}x validasi (best={best_perf:.4f})')
+                    break
+
+        # save last model every epoch (also serves as resume checkpoint for AUTO_RESUME)
+        if rank in [-1, 0]:
             save_checkpoint(
                 epoch=epoch,
                 name=cfg.MODEL.NAME,
                 model=model,
-                # 'best_state_dict': model.module.state_dict(),
-                # 'perf': perf_indicator,
                 optimizer=optimizer,
                 output_dir=final_output_dir,
-                filename=f'epoch-{epoch}.pth'
+                filename='last.pth'
             )
             save_checkpoint(
                 epoch=epoch,
                 name=cfg.MODEL.NAME,
                 model=model,
-                # 'best_state_dict': model.module.state_dict(),
-                # 'perf': perf_indicator,
                 optimizer=optimizer,
                 output_dir=os.path.join(cfg.LOG_DIR, cfg.DATASET.DATASET),
                 filename='checkpoint.pth'
             )
 
-    # save final model
-    if (epoch % cfg.TRAIN.VAL_FREQ == 0 or epoch == cfg.TRAIN.END_EPOCH) and rank in [-1, 0]:
-    # if rank in [-1, 0]:
-        final_model_state_file = os.path.join(
-            final_output_dir, 'final_state.pth'
-        )
-        logger.info('=> saving final model state to {}'.format(
-            final_model_state_file)
-        )
-        model_state = model.module.state_dict() if is_parallel(model) else model.state_dict()
-        torch.save(model_state, final_model_state_file)
+    if rank in [-1, 0]:
+        logger.info('=> done. best.pth (fitness={:.4f}) & last.pth in {}'.format(best_perf, final_output_dir))
         writer_dict['writer'].close()
-    else:
+    if rank != -1:
         dist.destroy_process_group()
 
 
