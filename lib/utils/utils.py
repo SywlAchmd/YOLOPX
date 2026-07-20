@@ -26,10 +26,10 @@ def create_logger(cfg, cfg_path, phase='train', rank=-1):
 
     if rank in [-1, 0]:
         time_str = time.strftime('%Y-%m-%d-%H-%M')
-        log_file = '{}_{}_{}.log'.format(cfg_path, time_str, phase)
+        run_name = model or 'exp'  # MODEL.NAME as run name -> runs/<run_name>/, reruns reuse the same dir
+        log_file = '{}_{}_{}.log'.format(run_name, time_str, phase)
         # set up tensorboard_log_dir
-        tensorboard_log_dir = Path(cfg.LOG_DIR) / dataset / model / \
-                                  (cfg_path + '_' + time_str)
+        tensorboard_log_dir = Path(cfg.LOG_DIR) / run_name
         final_output_dir = tensorboard_log_dir
         if not tensorboard_log_dir.exists():
             print('=> creating {}'.format(tensorboard_log_dir))
@@ -38,7 +38,7 @@ def create_logger(cfg, cfg_path, phase='train', rank=-1):
         final_log_file = tensorboard_log_dir / log_file
         head = '%(asctime)-15s %(message)s'
         logging.basicConfig(filename=str(final_log_file),
-                            format=head)
+                            format=head, force=True)  # force: drop handlers from previous runs (avoids duplicate log lines in notebooks)
         logger = logging.getLogger()
         logger.setLevel(logging.INFO)
         console = logging.StreamHandler()

@@ -123,7 +123,7 @@ def main():
     optimizer = get_optimizer(cfg, model)
 
     # load checkpoint model
-    best_perf = -1.0  # -1 agar validasi pertama selalu menyimpan best.pth
+    best_perf = -1.0  # -1 so the first validation always saves best.pth
     best_model = False
     last_epoch = -1
 
@@ -138,9 +138,9 @@ def main():
     begin_epoch = cfg.TRAIN.BEGIN_EPOCH
 
     if rank in [-1, 0]:
-        checkpoint_file = os.path.join(
-            os.path.join(cfg.LOG_DIR, cfg.DATASET.DATASET), 'checkpoint.pth'
-        )
+        checkpoint_dir = os.path.join(cfg.LOG_DIR, cfg.DATASET.DATASET)
+        os.makedirs(checkpoint_dir, exist_ok=True)  # no longer created by create_logger since run dirs moved to LOG_DIR/<run_name>
+        checkpoint_file = os.path.join(checkpoint_dir, 'checkpoint.pth')
         if os.path.exists(cfg.MODEL.PRETRAINED):
             logger.info("=> loading model '{}'".format(cfg.MODEL.PRETRAINED))
             checkpoint = torch.load(cfg.MODEL.PRETRAINED)
@@ -284,7 +284,7 @@ def main():
     # training
     num_warmup = max(round(cfg.TRAIN.WARMUP_EPOCHS * num_batch), 1000)
     scaler = amp.GradScaler(enabled=device.type != 'cpu')
-    no_improve = 0  # counter early stopping (dihitung per validasi, bukan per epoch)
+    no_improve = 0  # early-stopping counter (counted per validation, not per epoch)
     print('=> start training...')
     for epoch in range(begin_epoch+1, cfg.TRAIN.END_EPOCH+1):
         if rank != -1:
@@ -327,7 +327,7 @@ def main():
             else:
                 no_improve += 1
                 if patience and no_improve >= patience:
-                    logger.info(f'=> early stopping: fitness tidak membaik {patience}x validasi (best={best_perf:.4f})')
+                    logger.info(f'=> early stopping: no fitness improvement for {patience} validations (best={best_perf:.4f})')
                     break
 
         # save last model every epoch (also serves as resume checkpoint for AUTO_RESUME)
