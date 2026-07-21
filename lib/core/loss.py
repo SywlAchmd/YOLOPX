@@ -97,7 +97,12 @@ class MultiHeadLoss(nn.Module):
         
         loss = det_all_loss + da_seg_loss + ll_seg_loss + ll_tversky_loss
 
-        return loss, (det_all_loss.item(), da_seg_loss.item(), ll_seg_loss.item(), ll_tversky_loss.item(), loss.item())
+        # box/obj scaled with the same factor as det_all so they sum to it (for logging)
+        det_scale = 0.02 * self.lambdas[1]
+        box_item = Det_loss.box_item * det_scale
+        obj_item = Det_loss.obj_item * det_scale
+
+        return loss, (det_all_loss.item(), da_seg_loss.item(), ll_seg_loss.item(), ll_tversky_loss.item(), loss.item(), box_item, obj_item)
 
 
 def get_loss(cfg, device, model):

@@ -43,6 +43,7 @@ def train(cfg, train_loader, model, criterion, optimizer, scaler, epoch, num_bat
     batch_time = AverageMeter()
     data_time = AverageMeter()
     losses = AverageMeter()
+    box_l, obj_l, da_l, ll_l = AverageMeter(), AverageMeter(), AverageMeter(), AverageMeter()
 
     # switch to train mode
     model.train()
@@ -85,6 +86,10 @@ def train(cfg, train_loader, model, criterion, optimizer, scaler, epoch, num_bat
         if rank in [-1, 0]:
             # measure accuracy and record loss
             losses.update(total_loss.item(), input.size(0))
+            # head_losses = (det_all, da_seg, ll_seg, ll_tversky, total, box, obj)
+            bs = input.size(0)
+            box_l.update(head_losses[5], bs); obj_l.update(head_losses[6], bs)
+            da_l.update(head_losses[1], bs); ll_l.update(head_losses[2] + head_losses[3], bs)
 
             # _, avg_acc, cnt, pred = accuracy(output.detach().cpu().numpy(),
             #                                  target.detach().cpu().numpy())
@@ -110,6 +115,8 @@ def train(cfg, train_loader, model, criterion, optimizer, scaler, epoch, num_bat
                 writer.add_scalar('train_loss', losses.val, global_steps)
                 # writer.add_scalar('train_acc', acc.val, global_steps)
                 writer_dict['train_global_steps'] = global_steps + 1
+
+    return {'box': box_l.avg, 'obj': obj_l.avg, 'da_seg': da_l.avg, 'll_seg': ll_l.avg, 'total': losses.avg}
 
 
 def validate(epoch,config, val_loader, val_dataset, model, criterion, output_dir,
@@ -169,6 +176,7 @@ def validate(epoch,config, val_loader, val_dataset, model, criterion, output_dir
     p, r, f1, mp, mr, map50, map, t_inf, t_nms = 0., 0., 0., 0., 0., 0., 0., 0., 0.
     
     losses = AverageMeter()
+    box_l, obj_l, da_l, ll_l = AverageMeter(), AverageMeter(), AverageMeter(), AverageMeter()
 
     da_acc_seg = AverageMeter()
     da_IoU_seg = AverageMeter()
@@ -242,6 +250,9 @@ def validate(epoch,config, val_loader, val_dataset, model, criterion, output_dir
             
             total_loss, head_losses = criterion((train_out,da_seg_out,ll_seg_out), target, shapes,model, img )   #Compute loss
             losses.update(total_loss.item(), img.size(0))
+            bs = img.size(0)
+            box_l.update(head_losses[5], bs); obj_l.update(head_losses[6], bs)
+            da_l.update(head_losses[1], bs); ll_l.update(head_losses[2] + head_losses[3], bs)
 
             #NMS         
             t = time_synchronized()
@@ -433,7 +444,8 @@ def validate(epoch,config, val_loader, val_dataset, model, criterion, output_dir
     # print('mp:{},mr:{},map50:{},map:{}'.format(mp, mr, map50, map))
     #print segmet_result
     t = [T_inf.avg, T_nms.avg]
-    return da_segment_result, ll_segment_result, detect_result, losses.avg, maps, t
+    val_losses = {'box': box_l.avg, 'obj': obj_l.avg, 'da_seg': da_l.avg, 'll_seg': ll_l.avg, 'total': losses.avg}
+    return da_segment_result, ll_segment_result, detect_result, losses.avg, maps, t, val_losses
         
 
 

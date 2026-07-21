@@ -17,6 +17,7 @@ import torch.utils.data
 import torch.utils.data.distributed
 import torchvision.transforms as transforms
 import numpy as np
+import csv
 from lib.utils import DataLoaderX, torch_distributed_zero_first
 from tensorboardX import SummaryWriter
 
@@ -68,6 +69,26 @@ def parse_args():
     args = parser.parse_args()
 
     return args
+
+
+def log_results_csv(path, epoch, lr, fitness, tr, vl, det, da, ll):
+    row = {
+        'epoch': epoch,
+        'train/box_loss': tr['box'], 'train/obj_loss': tr['obj'],
+        'train/da_seg_loss': tr['da_seg'], 'train/ll_seg_loss': tr['ll_seg'], 'train/total_loss': tr['total'],
+        'val/box_loss': vl['box'], 'val/obj_loss': vl['obj'],
+        'val/da_seg_loss': vl['da_seg'], 'val/ll_seg_loss': vl['ll_seg'], 'val/total_loss': vl['total'],
+        'metrics/P': det[0], 'metrics/R': det[1], 'metrics/mAP50': det[2], 'metrics/mAP50-95': det[3],
+        'metrics/da_acc': da[0], 'metrics/da_iou': da[1], 'metrics/da_miou': da[2],
+        'metrics/ll_acc': ll[0], 'metrics/ll_iou': ll[1], 'metrics/ll_miou': ll[2],
+        'lr': lr, 'fitness': float(fitness),
+    }
+    write_header = not os.path.exists(path)
+    with open(path, 'a', newline='') as f:
+        w = csv.DictWriter(f, fieldnames=list(row.keys()))
+        if write_header:
+            w.writeheader()
+        w.writerow(row)
 
 
 def main():
@@ -289,20 +310,25 @@ def main():
         if rank != -1:
             train_loader.sampler.set_epoch(epoch)
         # train for one epoch
-        train(cfg, train_loader, model, criterion, optimizer, scaler,
+        train_losses = train(cfg, train_loader, model, criterion, optimizer, scaler,
               epoch, num_batch, num_warmup, writer_dict, logger, device, rank)
 
+        lr = optimizer.param_groups[0]['lr']
         lr_scheduler.step()
 
         # evaluate on validation set
         if (epoch % cfg.TRAIN.VAL_FREQ == 0 or epoch == cfg.TRAIN.END_EPOCH) and rank in [-1, 0]:
             # print('validate')
-            da_segment_results,ll_segment_results,detect_results, total_loss,maps, times = validate(
+            da_segment_results,ll_segment_results,detect_results, total_loss,maps, times, val_losses = validate(
                 epoch,cfg, valid_loader, valid_dataset, model, criterion,
                 final_output_dir, tb_log_dir, writer_dict,
                 logger, device, rank
             )
             fi = fitness(np.array(detect_results).reshape(1, -1))  #目标检测评价指标
+
+            # append one row to results.csv (ultralytics-style, for plotting)
+            log_results_csv(os.path.join(final_output_dir, 'results.csv'), epoch, lr, fi,
+                            train_losses, val_losses, detect_results, da_segment_results, ll_segment_results)
 
             msg = 'Epoch: [{0}]    Loss({loss:.3f})\n' \
                       'Driving area Segment: Acc({da_seg_acc:.3f})    IOU ({da_seg_iou:.3f})    mIOU({da_seg_miou:.3f})\n' \
