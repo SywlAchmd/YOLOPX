@@ -444,7 +444,8 @@ def validate(epoch,config, val_loader, val_dataset, model, criterion, output_dir
     # print('mp:{},mr:{},map50:{},map:{}'.format(mp, mr, map50, map))
     #print segmet_result
     t = [T_inf.avg, T_nms.avg]
-    val_losses = {'box': box_l.avg, 'obj': obj_l.avg, 'da_seg': da_l.avg, 'll_seg': ll_l.avg, 'total': losses.avg}
+    val_losses = {'box': box_l.avg, 'obj': obj_l.avg, 'da_seg': da_l.avg, 'll_seg': ll_l.avg, 'total': losses.avg,
+                  'map75': float(map75) if map75 is not None else 0.0}  # mAP@0.75 (computed but not in detect_result)
     return da_segment_result, ll_segment_result, detect_result, losses.avg, maps, t, val_losses
         
 
