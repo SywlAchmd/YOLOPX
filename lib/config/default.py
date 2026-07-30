@@ -30,7 +30,6 @@ _C.MODEL.HEADS_NAME = ['']
 # MODIFY
 _C.MODEL.PRETRAINED = ''
 _C.MODEL.PRETRAINED_DET = ""
-_C.TRAIN.FINETUNE = False
 #
 
 _C.MODEL.IMAGE_SIZE = [640, 640]  # width * height, ex: 192 * 256
