@@ -263,9 +263,9 @@ class YOLOX_Loss(nn.Module):
         reg_weight = 5.0
         loss = reg_weight * loss_iou + loss_obj
         # loss = reg_weight * loss_iou + loss_obj + loss_cls + loss_l1
-        # print(loss_iou)
-        # print(loss_obj)
-        # exit(0)
+        # stash components for logging (box = reg_weight*iou, obj = objectness)
+        self.box_item = (reg_weight * loss_iou).item()
+        self.obj_item = loss_obj.item()
 
         return loss
 
