@@ -137,19 +137,47 @@ def main():
     lr_scheduler = torch.optim.lr_scheduler.LambdaLR(optimizer, lr_lambda=lf)
     begin_epoch = cfg.TRAIN.BEGIN_EPOCH
 
+    # if rank in [-1, 0]:
+    #     # resume checkpoint lives at a fixed path (LOG_DIR root), independent of run name
+    #     checkpoint_file = os.path.join(cfg.LOG_DIR, 'checkpoint.pth')
+    #     if os.path.exists(cfg.MODEL.PRETRAINED):
+    #         logger.info("=> loading model '{}'".format(cfg.MODEL.PRETRAINED))
+    #         checkpoint = torch.load(cfg.MODEL.PRETRAINED)
+    #         begin_epoch = checkpoint['epoch']
+    #         # best_perf = checkpoint['perf']
+    #         last_epoch = checkpoint['epoch']
+    #         model.load_state_dict(checkpoint['state_dict'])
+    #         optimizer.load_state_dict(checkpoint['optimizer'])
+    #         logger.info("=> loaded checkpoint '{}' (epoch {})".format(
+    #             cfg.MODEL.PRETRAINED, checkpoint['epoch']))
+    #         #cfg.NEED_AUTOANCHOR = False     #disable autoanchor
+
+    # Add fine tuning logic
     if rank in [-1, 0]:
         # resume checkpoint lives at a fixed path (LOG_DIR root), independent of run name
         checkpoint_file = os.path.join(cfg.LOG_DIR, 'checkpoint.pth')
         if os.path.exists(cfg.MODEL.PRETRAINED):
             logger.info("=> loading model '{}'".format(cfg.MODEL.PRETRAINED))
             checkpoint = torch.load(cfg.MODEL.PRETRAINED)
-            begin_epoch = checkpoint['epoch']
-            # best_perf = checkpoint['perf']
-            last_epoch = checkpoint['epoch']
-            model.load_state_dict(checkpoint['state_dict'])
-            optimizer.load_state_dict(checkpoint['optimizer'])
-            logger.info("=> loaded checkpoint '{}' (epoch {})".format(
-                cfg.MODEL.PRETRAINED, checkpoint['epoch']))
+
+            if cfg.TRAIN.FINETUNE:
+                # FINE-TUNE: load bobot saja, optimizer & epoch mulai fresh
+                model.load_state_dict(checkpoint['state_dict'])
+                logger.info("=> loaded weights ONLY for fine-tuning (epoch/optimizer direset)")
+
+                if cfg.TRAIN.RESET_BN_STATS:
+                    for m in model.modules():
+                        if isinstance(m, torch.nn.BatchNorm2d):
+                            m.reset_running_stats()
+                    logger.info("=> BatchNorm running stats direset")
+            else:
+                # RESUME biasa (perilaku asli)
+                begin_epoch = checkpoint['epoch']
+                last_epoch = checkpoint['epoch']
+                model.load_state_dict(checkpoint['state_dict'])
+                optimizer.load_state_dict(checkpoint['optimizer'])
+                logger.info("=> loaded checkpoint '{}' (epoch {})".format(
+                    cfg.MODEL.PRETRAINED, checkpoint['epoch']))
             #cfg.NEED_AUTOANCHOR = False     #disable autoanchor
         
         if os.path.exists(cfg.MODEL.PRETRAINED_DET):
